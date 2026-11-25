@@ -66,24 +66,28 @@ h2 { margin: 0; font: normal 27px/1.3 Georgia, serif; letter-spacing: -.6px; }
   touch-action: pan-y;
 }
 .cut-gaps { position: absolute; inset: 0; }
+/* Cards move by transform only: left/top would relayout and repaint 78
+   elements on every pointer move. */
 .cut-gap.back {
   position: absolute;
-  left: var(--row-left, 0px);
+  left: 0;
   top: 70px;
   width: var(--cut-card-width, 96px);
   aspect-ratio: 96 / 150;
   border-width: 3px;
   border-radius: 5px;
   z-index: var(--cut-layer);
-  transition: left .18s ease, transform .7s ease;
+  transform: translate3d(var(--row-left, 0px), 0, 0);
+  will-change: transform;
+  transition: transform .18s ease;
 }
 .cut-gap:disabled { opacity: 1; }
 .cut-gap:focus-visible { outline-offset: -3px; }
 .cut-gap.back::after { font-size: 36px; }
 .red-cut-card {
   position: absolute;
-  left: var(--red-x, 45%);
-  top: var(--red-y, 15px);
+  left: 0;
+  top: 0;
   width: var(--cut-card-width, 96px);
   aspect-ratio: 96 / 150;
   background: #c52c38;
@@ -94,8 +98,10 @@ h2 { margin: 0; font: normal 27px/1.3 Georgia, serif; letter-spacing: -.6px; }
   box-shadow: 0 8px 18px #0003;
   pointer-events: none;
   z-index: 300;
-  transform: rotate(-9deg);
-  transition: transform .45s, opacity .4s;
+  /* Position rides on the transform so following the pointer costs no layout. */
+  transform: translate3d(var(--red-x, 0px), var(--red-y, 0px), 0) rotate(-9deg);
+  will-change: transform;
+  transition: opacity .4s;
   display: grid;
   place-items: center;
 }
@@ -104,17 +110,19 @@ h2 { margin: 0; font: normal 27px/1.3 Georgia, serif; letter-spacing: -.6px; }
 @media (hover: hover) {
   .cut-deck, .cut-deck button { cursor: none; }
 }
-.inserting .red-cut-card { transform: translateY(55px) rotate(0deg); }
+.inserting .red-cut-card {
+  transform: translate3d(var(--red-x, 0px), var(--red-y, 0px), 0) translateY(55px) rotate(0deg);
+  transition: transform .45s, opacity .4s;
+}
 .splitting .red-cut-card { opacity: 0; }
 .splitting .cut-gap {
-  left: var(--pile-left);
-  transform: translateY(var(--pile-lift));
-  transition: left .8s cubic-bezier(.4,0,.2,1), transform .8s;
+  transform: translate3d(var(--pile-left), var(--pile-lift), 0);
+  transition: transform .8s cubic-bezier(.4,0,.2,1);
 }
 .rejoining .cut-gap {
-  left: var(--final-left);
-  transform: translateY(0);
+  transform: translate3d(var(--final-left), 0, 0);
   z-index: var(--final-layer);
+  transition: transform .8s cubic-bezier(.4,0,.2,1);
 }
 
 .cut-help { font-size: 11px; text-align: center; color: var(--muted); margin: 5px 0 18px; }
@@ -130,29 +138,30 @@ h2 { margin: 0; font: normal 27px/1.3 Georgia, serif; letter-spacing: -.6px; }
 }
 .draw-card.back {
   position: absolute;
-  top: var(--card-top, 0px);
-  left: var(--card-left, 0px);
+  top: 0;
+  left: 0;
   width: var(--card-width, 96px);
   height: auto;
   aspect-ratio: 96 / 150;
   border-width: 3px;
   border-radius: 5px;
   z-index: var(--layer, var(--card-index));
-  transform: rotate(var(--card-rotation, 0deg));
-  transition: left .12s ease-out, top .12s ease-out, transform .12s ease-out, box-shadow .18s;
+  transform: translate3d(var(--card-x, 0px), var(--card-y, 0px), 0) rotate(var(--card-rotation, 0deg));
+  will-change: transform;
+  transition: transform .12s ease-out, box-shadow .18s;
 }
 .draw-card:disabled { opacity: 1; }
 .draw-card::before { inset: 5px; }
 .draw-card::after { font-size: 36px; }
 .draw-card:focus-visible { outline-offset: -3px; box-shadow: 0 6px 8px #0002; }
-.draw-card.drawing { transform: rotate(var(--card-rotation)) scale(1.12); z-index: 300; }
+.draw-card.drawing { transform: translate3d(var(--card-x, 0px), var(--card-y, 0px), 0) rotate(var(--card-rotation, 0deg)) scale(1.12); z-index: 300; }
 .draw-card.dealing {
   animation: deal-card .55s var(--deal-delay) both;
   cursor: wait;
 }
 @keyframes deal-card {
-  from { opacity: 0; transform: rotate(var(--card-rotation)) scale(.4); }
-  to { opacity: 1; transform: rotate(var(--card-rotation)) scale(1); }
+  from { opacity: 0; transform: translate3d(var(--card-x, 0px), var(--card-y, 0px), 0) rotate(var(--card-rotation, 0deg)) scale(.4); }
+  to { opacity: 1; transform: translate3d(var(--card-x, 0px), var(--card-y, 0px), 0) rotate(var(--card-rotation, 0deg)) scale(1); }
 }
 
 /* Keep labels upright outside the face, even when the artwork is reversed. */
@@ -206,27 +215,19 @@ dialog p { color: var(--muted); margin-bottom: 25px; }
   border-width: 3px;
   border-radius: 5px;
   box-shadow: 0 2px 5px #0002;
+  /* Stacking order is fixed for the whole mix; animating z-index forced a
+     repaint of this box on every frame of every card. */
+  z-index: var(--end-layer);
+  will-change: transform;
   animation: mix-deck 3.2s var(--delay) both;
 }
 .mix-card.back::before { inset: 5px; }
 .mix-card.back::after { font-size: 36px; }
 @keyframes mix-deck {
-  0%, 8% {
-    transform: translate(0, 0) rotate(var(--start-angle));
-    z-index: var(--start-layer);
-  }
-  30% {
-    transform: translate(calc(var(--x-one) * var(--travel)), var(--y-one)) rotate(var(--spin));
-    z-index: var(--start-layer);
-  }
-  60% {
-    transform: translate(calc(var(--x-two) * var(--travel)), var(--y-two)) rotate(var(--end-angle));
-    z-index: var(--end-layer);
-  }
-  88%, 100% {
-    transform: translate(0, 0) rotate(var(--end-angle));
-    z-index: var(--end-layer);
-  }
+  0%, 8% { transform: translate3d(0, 0, 0) rotate(var(--start-angle)); }
+  30% { transform: translate3d(calc(var(--x-one) * var(--travel)), var(--y-one), 0) rotate(var(--spin)); }
+  60% { transform: translate3d(calc(var(--x-two) * var(--travel)), var(--y-two), 0) rotate(var(--end-angle)); }
+  88%, 100% { transform: translate3d(0, 0, 0) rotate(var(--end-angle)); }
 }
 .cutting .stack-card:nth-child(3) { animation: cut .6s ease-in-out; }
 @keyframes cut { 50% { transform: translate(110px, -15px) rotate(6deg); } }

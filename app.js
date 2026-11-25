@@ -22,9 +22,15 @@ let cutPosition = 39;
 // stay in the bottom pile, so a cut after card 78 is intentionally unavailable.
 function renderCutDeck() {
   ui['cut-gaps'].replaceChildren();
+  cutLayoutKey = '';
+  cutPileKey = '';
+  cutRowWrite = [];
+  selectedGap = -1;
   for (let position = 1; position <= 78; position++) {
     const gap = element('button', 'cut-gap back');
     gap.type = 'button';
+    gap.tabIndex = -1;
+    gap.style.setProperty('--cut-layer', String(position - 1));
     gap.setAttribute('aria-label', position === 78 ? t('Last card in the deck') : t('Cut after card {position} of 78', { position }));
     gap.addEventListener('click', (event) => {
       if (event.detail === 0 && position < 78) {
@@ -41,31 +47,66 @@ function renderCutDeck() {
 function selectCutPosition(position) {
   if (busy) return;
   cutPosition = Math.max(1, Math.min(77, position));
-  ui['cut-value'].textContent = `${cutPosition} / 78`;
+  if (ui['cut-value'].textContent !== `${cutPosition} / 78`) {
+    ui['cut-value'].textContent = `${cutPosition} / 78`;
+  }
   layoutCutDeck();
-  Array.from(ui['cut-gaps'].children).forEach((gap, index) => {
-    const selected = index + 1 === cutPosition;
-    gap.tabIndex = selected ? 0 : -1;
-    gap.setAttribute('aria-pressed', String(selected));
-  });
+  // Only the gap that lost selection and the one that gained it are touched.
+  const gaps = ui['cut-gaps'].children;
+  const next = cutPosition - 1;
+  if (selectedGap === next) return;
+  if (gaps[selectedGap]) {
+    gaps[selectedGap].tabIndex = -1;
+    gaps[selectedGap].setAttribute('aria-pressed', 'false');
+  }
+  if (gaps[next]) {
+    gaps[next].tabIndex = 0;
+    gaps[next].setAttribute('aria-pressed', 'true');
+  }
+  selectedGap = next;
 }
 
 // Use the same adaptive overlapping row as the drawing stage. The red card
 // rests at the chosen boundary until pointer movement picks it up again.
+// Dragging only repositions the row, and only the gaps that actually move.
 function layoutCutDeck() {
-  const width = ui['cut-deck'].clientWidth;
+  const deckElement = ui['cut-deck'];
+  const width = deckElement.clientWidth;
+  if (!width) return;
+  const key = `${width}|${cutPosition}`;
+  if (key === cutLayoutKey) return;
+  cutLayoutKey = key;
   const layout = getDeckLayout(width, 78, cutPosition - .5);
-  ui['cut-deck'].style.setProperty('--cut-card-width', `${layout.cardWidth}px`);
-  Array.from(ui['cut-gaps'].children).forEach((card, index) => {
-    card.style.setProperty('--row-left', `${layout.positions[index]}px`);
-    card.style.setProperty('--pile-left', `${Math.max(0, (width - layout.cardWidth) / 2 + (index < cutPosition ? -1 : 1) * layout.cardWidth * .6)}px`);
-    card.style.setProperty('--final-left', `${(width - layout.cardWidth) / 2}px`);
-    card.style.setProperty('--pile-lift', index < cutPosition ? '25px' : '-25px');
-    card.style.setProperty('--cut-layer', String(index));
-    card.style.setProperty('--final-layer', String(index < cutPosition ? index : index + 78));
-  });
+  deckElement.style.setProperty('--cut-card-width', `${layout.cardWidth}px`);
+  const gaps = ui['cut-gaps'].children;
+  for (let index = 0; index < gaps.length; index++) {
+    const left = Math.round(layout.positions[index]);
+    if (cutRowWrite[index] === left) continue;
+    cutRowWrite[index] = left;
+    gaps[index].style.setProperty('--row-left', `${left}px`);
+  }
   ui['red-cut-card'].style.setProperty('--red-x', `${layout.positions[Math.min(77, cutPosition)]}px`);
   ui['red-cut-card'].style.setProperty('--red-y', '15px');
+}
+
+// Pile geometry is only read by the split and rejoin animations, so it is
+// written once when the cut begins instead of on every pointer move.
+function layoutCutPiles() {
+  const width = ui['cut-deck'].clientWidth;
+  if (!width) return;
+  const key = `${width}|${cutPosition}`;
+  if (key === cutPileKey) return;
+  cutPileKey = key;
+  const { cardWidth } = getDeckLayout(width, 78, cutPosition - .5);
+  const centered = (width - cardWidth) / 2;
+  const gaps = ui['cut-gaps'].children;
+  for (let index = 0; index < gaps.length; index++) {
+    const style = gaps[index].style;
+    style.setProperty('--pile-left', `${Math.max(0, centered + (index < cutPosition ? -1 : 1) * cardWidth * .6)}px`);
+    style.setProperty('--final-left', `${centered}px`);
+    style.setProperty('--pile-lift', index < cutPosition ? '25px' : '-25px');
+    style.setProperty('--final-layer', String(index < cutPosition ? index : index + 78));
+  }
 }
 
 function pointCutCard(clientX, clientY) {
@@ -146,15 +187,13 @@ function pauseForAnimation(milliseconds) {
 // Random travel paths are decorative; they never alter the actual deck order.
 function buildShuffleAnimation(previousDeck, nextDeck) {
   const field = ui['shuffle-field'];
-  field.replaceChildren();
   const finalPositions = new Map(nextDeck.map((entry, index) => [entry.card.id, index]));
 
-  previousDeck.forEach((entry, index) => {
+  const backs = previousDeck.map((entry, index) => {
     const back = element('div', 'mix-card back');
     const finalIndex = finalPositions.get(entry.card.id);
     const target = nextDeck[finalIndex];
     const properties = {
-      '--start-layer': String(78 - index),
       '--end-layer': String(78 - finalIndex),
       '--x-one': String((randomInteger(2001) - 1000) / 1000),
       '--x-two': String((randomInteger(2001) - 1000) / 1000),
@@ -168,8 +207,11 @@ function buildShuffleAnimation(previousDeck, nextDeck) {
     for (const [property, value] of Object.entries(properties)) {
       back.style.setProperty(property, value);
     }
-    field.append(back);
+    return back;
   });
+  // One insertion instead of 78 keeps the first frame of the mix hitch-free.
+  field.replaceChildren();
+  field.append(...backs);
 }
 
 async function shuffleDeck() {
@@ -210,6 +252,7 @@ async function confirmCut() {
   setBusy(true);
   const position = cutPosition;
   layoutCutDeck();
+  layoutCutPiles();
   ui['cut-deck'].classList.add('inserting');
   ui.status.textContent = t('Inserting the red card after card {position} of 78…', { position });
   await pauseForAnimation(600);
@@ -247,9 +290,66 @@ function element(tag, className, text) {
 let highlightedCard = -1;
 let pressedPointer = null;
 
+/*
+ * Smoothness: card positions are written as transforms so the compositor moves
+ * promoted layers without layout or paint, pointer input is coalesced to one
+ * update per displayed frame, and geometry is cached per shape. None of this
+ * touches deck state.
+ */
+const nextFrame = (callback) => (typeof requestAnimationFrame === 'function'
+  ? requestAnimationFrame(callback)
+  : setTimeout(callback, 16));
+
+function throttleFrame(callback) {
+  let scheduled = false;
+  let latest = null;
+  return function (...args) {
+    latest = args;
+    if (scheduled) return;
+    scheduled = true;
+    nextFrame(() => {
+      scheduled = false;
+      callback(...latest);
+    });
+  };
+}
+
+const layoutCache = new Map();
+
+function cachedLayout(key, compute) {
+  const hit = layoutCache.get(key);
+  if (hit) return hit;
+  if (layoutCache.size >= 128) layoutCache.clear();
+  const value = compute();
+  layoutCache.set(key, value);
+  return value;
+}
+
+let spreadWidth = -1;
+let spreadCardWidth = -1;
+let spreadFocus = -1;
+let spreadWrite = [];
+let cutLayoutKey = '';
+let cutPileKey = '';
+let cutRowWrite = [];
+let selectedGap = -1;
+
+// Fresh nodes need fresh positions, and only one card is a tab stop at a time.
+function resetSpreadLayout() {
+  spreadWidth = -1;
+  spreadCardWidth = -1;
+  spreadFocus = -1;
+  spreadWrite = [];
+  highlightedCard = -2;
+}
+
 // Distribute extra space near the highlighted card, then normalize all gaps.
 // The first and last cards always stay inside the available width.
 function getDeckLayout(width, count, highlighted = -1) {
+  return cachedLayout(`row|${width}|${count}|${highlighted}`, () => computeDeckLayout(width, count, highlighted));
+}
+
+function computeDeckLayout(width, count, highlighted) {
   const cardWidth = Math.min(96, Math.max(1, width * .28));
   const travel = Math.max(0, width - cardWidth);
   const weights = Array.from({ length: Math.max(0, count - 1) }, (_, index) => {
@@ -269,6 +369,10 @@ function getDeckLayout(width, count, highlighted = -1) {
 // Place card centers around a ring. Reserve room for rotated corners and lift
 // so the full circle stays inside the table, including on narrow screens.
 function getCircleLayout(size, count, highlighted = -1) {
+  return cachedLayout(`circle|${size}|${count}|${highlighted}`, () => computeCircleLayout(size, count, highlighted));
+}
+
+function computeCircleLayout(size, count, highlighted) {
   const cardWidth = Math.min(80, size * .15);
   const cardHeight = cardWidth * 150 / 96;
   const lift = size * .045;
@@ -288,18 +392,64 @@ function getCircleLayout(size, count, highlighted = -1) {
   return { cardWidth, cardHeight, radius, positions };
 }
 
+// One write pass per actual change: the card width lives on the container, and
+// a card is only restyled when its rounded position or layer really moved.
 function layoutSpread(highlighted = -1) {
-  highlightedCard = highlighted;
-  const { cardWidth, positions } = getCircleLayout(ui['card-spread'].clientWidth, deck.length, highlighted);
-  Array.from(ui['card-spread'].children).forEach((button, index) => {
+  const container = ui['card-spread'];
+  const cards = container.children;
+  const width = container.clientWidth;
+  if (!width || !cards.length) return;
+  const target = highlighted < 0 ? -1 : Math.min(highlighted, cards.length - 1);
+  if (target === highlightedCard && width === spreadWidth && spreadWrite.length === cards.length) return;
+
+  const { cardWidth, positions } = getCircleLayout(width, cards.length, target);
+  if (cardWidth !== spreadCardWidth) {
+    container.style.setProperty('--card-width', `${cardWidth}px`);
+    spreadCardWidth = cardWidth;
+  }
+  spreadWidth = width;
+  highlightedCard = target;
+
+  // A rebuilt ring starts with no tab stop; the focused card is set below.
+  if (spreadWrite.length !== cards.length) {
+    spreadWrite = Array.from({ length: cards.length }, () => null);
+    for (const card of cards) card.tabIndex = -1;
+    spreadFocus = -1;
+  }
+
+  const focusTarget = Math.max(0, target);
+  if (focusTarget !== spreadFocus) {
+    if (cards[spreadFocus]) cards[spreadFocus].tabIndex = -1;
+    if (cards[focusTarget]) cards[focusTarget].tabIndex = 0;
+    spreadFocus = focusTarget;
+  }
+
+  for (let index = 0; index < cards.length; index++) {
     const position = positions[index];
-    button.style.setProperty('--card-width', `${cardWidth}px`);
-    button.style.setProperty('--card-left', `${position.x}px`);
-    button.style.setProperty('--card-top', `${position.y}px`);
-    button.style.setProperty('--card-rotation', `${position.rotation}deg`);
-    button.style.setProperty('--layer', String(highlighted < 0 ? index : 200 - position.distance));
-    button.tabIndex = index === Math.max(0, highlighted) ? 0 : -1;
-  });
+    const x = Math.round(position.x);
+    const y = Math.round(position.y);
+    const rotation = Math.round(position.rotation * 100) / 100;
+    // Only cards near the pointer are lifted, so the far field keeps its base
+    // stacking order and is not restyled as the ring turns.
+    const layer = target < 0 || position.distance > 14 ? index : 200 - position.distance;
+    const previous = spreadWrite[index] || (spreadWrite[index] = { x: NaN, y: NaN, rotation: NaN, layer: NaN });
+    const style = cards[index].style;
+    // Whole-pixel positions keep distant cards unchanged as the ring turns.
+    if (previous.x !== x || previous.y !== y) {
+      style.setProperty('--card-x', `${x}px`);
+      style.setProperty('--card-y', `${y}px`);
+      previous.x = x;
+      previous.y = y;
+    }
+    if (previous.rotation !== rotation) {
+      style.setProperty('--card-rotation', `${rotation}deg`);
+      previous.rotation = rotation;
+    }
+    if (previous.layer !== layer) {
+      style.setProperty('--layer', String(layer));
+      previous.layer = layer;
+    }
+  }
 }
 
 // Hit testing uses a fixed coordinate map, not moving card edges, so magnifying
@@ -318,6 +468,7 @@ function cardIndexAt(clientX, clientY) {
 
 function renderSpread(animate = false) {
   ui['card-spread'].replaceChildren();
+  resetSpreadLayout();
   deck.forEach((entry, index) => {
     const button = element('button', 'draw-card back');
     button.type = 'button';
@@ -404,8 +555,6 @@ async function drawCard(entry) {
   // Bring the destination into view before flying a temporary back into it.
   // Only the decoration moves; the selected deck entry stays unchanged.
   article.scrollIntoView({ behavior: 'instant', block: 'nearest' });
-  renderSpread();
-  for (const button of ui['card-spread'].children) button.disabled = true;
   if (!reducedMotion) {
     const destination = reveal.getBoundingClientRect();
     const flyingCard = element('div', 'flying-card back');
@@ -426,6 +575,9 @@ async function drawCard(entry) {
       flyingCard.remove();
     }
   }
+  // Rebuild the ring only after the flight, so nothing repaints beneath it.
+  renderSpread();
+  for (const button of ui['card-spread'].children) button.disabled = true;
   article.classList.remove('awaiting-reveal');
   await pauseForAnimation(100);
   reveal.classList.add('is-flipped');
@@ -449,6 +601,7 @@ function resetReading() {
   setPhase('shuffle');
   ui['reading-grid'].replaceChildren();
   ui['card-spread'].replaceChildren();
+  resetSpreadLayout();
   ui['reading-empty'].hidden = false;
   ui['empty-deck'].hidden = true;
   ui['reading-count'].textContent = t('No cards drawn yet');
@@ -462,8 +615,12 @@ function resetReading() {
 }
 
 ui.shuffle.addEventListener('click', shuffleDeck);
+const scheduleSpreadPointer = throttleFrame((clientX, clientY) => {
+  if (busy || !deck.length || drawnCards.length) return;
+  layoutSpread(cardIndexAt(clientX, clientY));
+});
 ui['card-spread'].addEventListener('pointermove', (event) => {
-  if (!busy && deck.length && !drawnCards.length) layoutSpread(cardIndexAt(event.clientX, event.clientY));
+  if (!busy && deck.length && !drawnCards.length) scheduleSpreadPointer(event.clientX, event.clientY);
 });
 ui['card-spread'].addEventListener('pointerdown', (event) => {
   if (busy || drawnCards.length || !deck.length || event.button !== 0) return;
@@ -493,8 +650,12 @@ ui['card-spread'].addEventListener('pointerleave', () => {
 });
 new ResizeObserver(() => layoutSpread(highlightedCard)).observe(ui['card-spread']);
 new ResizeObserver(() => { if (!busy) layoutCutDeck(); }).observe(ui['cut-deck']);
+const scheduleCutPointer = throttleFrame((clientX, clientY) => {
+  if (busy || phase !== 'cut') return;
+  pointCutCard(clientX, clientY);
+});
 ui['cut-deck'].addEventListener('pointermove', (event) => {
-  if (!busy && phase === 'cut') pointCutCard(event.clientX, event.clientY);
+  if (!busy && phase === 'cut') scheduleCutPointer(event.clientX, event.clientY);
 });
 ui['cut-deck'].addEventListener('pointerleave', () => { if (!busy) layoutCutDeck(); });
 ui['cut-deck'].addEventListener('click', (event) => {
