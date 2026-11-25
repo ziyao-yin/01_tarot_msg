@@ -1,6 +1,8 @@
 # Arcana — local tarot drawing app
 
-Open `index.html` in a modern browser. No installation, server, API key, network connection, or account is needed.
+**Live:** https://ziyao-yin.github.io/01_tarot_msg/ (GitHub Pages, served straight from `main`)
+
+Open `index.html` in a modern browser, or use the live link above. No installation, server, API key, network connection, or account is needed.
 
 Use the header’s language selector to switch between English and 简体中文 (Simplified Chinese). The interface, accessibility labels, and all 78 card names and upright/reversed meanings are translated. Switching preserves the deck, cut position, and current reading. The selector is temporarily disabled during animations. Language selection lasts for the current page session.
 
