@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f8f8f6">
+    <title>Arcana — a tarot ritual</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="./index.html"><span aria-hidden="true">✳</span> ARCANA</a>
+      <span class="header-note" data-i18n="A LITTLE SPACE FOR POSSIBILITY">A LITTLE SPACE FOR POSSIBILITY</span>
+      <label class="language-picker"><span class="language-label">Language / 语言</span><select id="language" aria-label="Language / 语言"><option value="en">English</option><option value="zh-CN">简体中文</option></select></label>
+      <button id="restart" class="text-button" data-i18n="New reading">New reading</button>
+    </header>
+
+    <main>
+      <section class="intro">
+        <p class="eyebrow" data-i18n="THE FULL 78-CARD DECK">THE FULL 78-CARD DECK</p>
+        <h1 data-i18n="Let the cards unfold.">Let the cards unfold.</h1>
+        <p data-i18n="A quiet question. A shuffled deck. A new perspective.">A quiet question. A shuffled deck. A new perspective.</p>
+      </section>
+
+      <!-- Steps reflect the current state; cards cannot be drawn before cutting. -->
+      <ol class="steps" aria-label="Reading progress" data-i18n-aria="Reading progress">
+        <li id="step-shuffle" aria-current="step"><span>01</span> <span data-i18n="Shuffle">Shuffle</span></li>
+        <li id="step-cut"><span>02</span> <span data-i18n="Cut the deck">Cut the deck</span></li>
+        <li id="step-draw"><span>03</span> <span data-i18n="Draw your cards">Draw your cards</span></li>
+      </ol>
+
+      <section class="table" aria-labelledby="stage-title">
+        <div class="table-heading">
+          <div><p class="eyebrow" id="stage-label" data-i18n="BEGIN YOUR RITUAL">BEGIN YOUR RITUAL</p><h2 id="stage-title" data-i18n="Start with a shuffle.">Start with a shuffle.</h2></div>
+          <span class="deck-count" id="deck-count" data-i18n="78 cards · Full deck">78 cards · Full deck</span>
+        </div>
+
+        <!-- The same deck artwork is used on every face-down card. -->
+        <div id="preparation">
+          <div class="deck-stack" id="deck-stack" aria-hidden="true">
+            <div class="stack-card back"></div><div class="stack-card back"></div><div class="stack-card back"></div>
+          </div>
+          <!-- One animated back per real card, populated for each shuffle. -->
+          <div id="shuffle-field" class="shuffle-field" aria-hidden="true" hidden></div>
+          <p class="stage-copy" id="stage-copy" data-i18n="Bring a question to mind, or simply stay curious.">Bring a question to mind, or simply stay curious.</p>
+          <div id="shuffle-controls" class="controls"><button id="shuffle" class="primary"><span data-i18n="Shuffle the deck">Shuffle the deck</span> <span aria-hidden="true">✳</span></button></div>
+          <div id="cut-controls" class="cut-controls" hidden>
+            <div class="cut-heading"><span data-i18n="Insert the red cut card">Insert the red cut card</span> <output id="cut-value">39 / 78</output></div>
+            <div class="cut-deck" id="cut-deck" role="group" aria-label="Choose a gap in the deck" data-i18n-aria="Choose a gap in the deck">
+              <div id="cut-gaps" class="cut-gaps"></div>
+              <div id="red-cut-card" class="red-cut-card" aria-hidden="true"><span data-i18n="CUT">CUT</span></div>
+            </div>
+            <p class="cut-help" data-i18n="Move the red card across the deck. Click or tap to insert it and cut. Keyboard: arrow keys, then Enter.">Move the red card across the deck. Click or tap to insert it and cut. Keyboard: arrow keys, then Enter.</p>
+            <p class="cut-help" data-i18n="The bottom pile moves to the top. Order and orientations stay intact.">The bottom pile moves to the top. Order and orientations stay intact.</p>
+            <div class="controls"><button id="reshuffle" class="secondary" data-i18n="Shuffle again">Shuffle again</button><button id="cut" class="primary" data-i18n="Insert at selected position">Insert at selected position</button></div>
+          </div>
+        </div>
+
+        <div id="draw-area" hidden>
+          <p class="draw-instruction" data-i18n="Choose one card from the circle. Move around the ring to lift nearby cards, then click to draw. On touch screens, slide around the ring and release. Keyboard: arrow keys, then Enter.">Choose one card from the circle. Move around the ring to lift nearby cards, then click to draw. On touch screens, slide around the ring and release. Keyboard: arrow keys, then Enter.</p>
+          <div class="card-spread" id="card-spread" role="group" aria-label="Face-down cards available to draw" data-i18n-aria="Face-down cards available to draw"></div>
+          <p id="empty-deck" class="stage-copy" hidden data-i18n="You’ve drawn the entire deck. Start a new reading whenever you’re ready.">You’ve drawn the entire deck. Start a new reading whenever you’re ready.</p>
+        </div>
+        <p class="status" id="status" role="status" aria-live="polite" data-i18n="Upright &amp; reversed · Randomized with every shuffle">Upright & reversed · Randomized with every shuffle</p>
+      </section>
+
+      <section class="reading" aria-labelledby="reading-title">
+        <div class="reading-heading"><div><p class="eyebrow" data-i18n="WHAT COMES TO LIGHT">WHAT COMES TO LIGHT</p><h2 id="reading-title" data-i18n="Your reading">Your reading</h2></div><span id="reading-count" data-i18n="No cards drawn yet">No cards drawn yet</span></div>
+        <div class="reading-empty" id="reading-empty"><span aria-hidden="true">✧</span><p data-i18n="Your card will find its place here.">Your card will find its place here.</p><small data-i18n="Draw one card for a moment of reflection.">Draw one card for a moment of reflection.</small></div>
+        <div class="reading-grid" id="reading-grid"></div>
+      </section>
+    </main>
+    <footer><span data-i18n="ARCANA / A LOCAL TAROT EXPERIENCE">ARCANA / A LOCAL TAROT EXPERIENCE</span><span data-i18n="A tool for reflection, not a prediction.">A tool for reflection, not a prediction.</span></footer>
+
+    <!-- Ask before discarding a reading that already contains drawn cards. -->
+    <dialog id="restart-dialog">
+      <h2 data-i18n="Begin a new reading?">Begin a new reading?</h2><p data-i18n="Your current cards will be cleared.">Your current cards will be cleared.</p>
+      <div class="controls"><button id="cancel-restart" class="secondary" data-i18n="Keep this reading">Keep this reading</button><button id="confirm-restart" class="primary" data-i18n="Start fresh">Start fresh</button></div>
+    </dialog>
+    <script src="cards.js"></script>
+    <script src="cards-zh.js"></script>
+    <script src="i18n.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

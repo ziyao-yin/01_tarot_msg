@@ -1,0 +1,10 @@
+# OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# No build step, but keep common local artifacts out
+node_modules/
+.hermes/
+.vscode/
+.idea/
